@@ -3,6 +3,7 @@
 import requests
 import pandas as pd
 from functools import reduce
+import io
 
 # Indicateurs Banque Mondiale (code: nom lisible)
 INDICATEURS = {
@@ -13,7 +14,16 @@ INDICATEURS = {
     "RNB_par_habitant": "NY.GNI.PCAP.CD",
     "Inflation": "FP.CPI.TOTL.ZG",
     "Indice_Gini": "SI.POV.GINI",
-    # L'IDH n'est pas disponible sur la Banque Mondiale, il faudra une autre source si besoin
+    "Production_agricole_brute_USD": "NV.AGR.TOTL.CD",
+    "Exportations_biens_services_PIB": "NE.EXP.GNFS.ZS",
+    "Importations_biens_services_PIB": "NE.IMP.GNFS.ZS",
+    "Dette_extérieure_totale_RNB": "DT.DOD.DECT.GN.ZS",
+    "Balance_commerciale_USD": "BN.GSR.GNFS.CD",
+    "IDE_entrées_net_PIB": "BX.KLT.DINV.WD.GD.ZS",
+    "Taux_chomage": "SL.UEM.TOTL.ZS",
+    "Depenses_sante_PIB": "SH.XPD.CHEX.GD.ZS",
+    "Depenses_education_PIB": "SE.XPD.TOTL.GD.ZS",
+    "Conso_energie_hab": "EG.USE.PCAP.KG.OE"
 }
 
 def fetch_indicator(indicator_code, start_year=2000, end_year=2023):
@@ -47,6 +57,23 @@ def fetch_indicator(indicator_code, start_year=2000, end_year=2023):
         print(f"Erreur récupération {indicator_code}: {e}")
         return pd.DataFrame()
 
+def fetch_gini_owid(start_year=2000, end_year=2023):
+    url = "https://raw.githubusercontent.com/owid/owid-datasets/master/datasets/GINI%20Index%20-%20World%20Bank%20(2017)/GINI%20Index%20-%20World%20Bank%20(2017).csv"
+    try:
+        df = pd.read_csv(url)
+        df = df.rename(columns={
+            "Entity": "Pays",
+            "Year": "Année",
+            "Code": "Code_Pays",
+            "GINI Index (World Bank (2017))": "Indice_Gini"
+        })
+        df = df[["Pays", "Code_Pays", "Année", "Indice_Gini"]]
+        df = df[(df["Année"] >= start_year) & (df["Année"] <= end_year)]
+        return df
+    except Exception as e:
+        print(f"Erreur récupération GINI OWID: {e}")
+        return pd.DataFrame()
+
 def recuperer_donnees_pays(start_year=2000, end_year=2023):
     """
     Télécharge les données des indicateurs économiques pour tous les pays via l'API de la Banque Mondiale.
@@ -58,11 +85,12 @@ def recuperer_donnees_pays(start_year=2000, end_year=2023):
     # Récupère tous les indicateurs et fusionne sur Pays, Code_Pays, Année
     dfs = []
     for nom, code in INDICATEURS.items():
-        df = fetch_indicator(code, start_year, end_year)
+        if nom == "Indice_Gini":
+            df = fetch_gini_owid(start_year, end_year)
+        else:
+            df = fetch_indicator(code, start_year, end_year)
         if not df.empty:
-            # Renommer uniquement la colonne de valeur, jamais la colonne Année
-            cols_to_rename = {code: nom}
-            # Si une colonne Année_X existe, la renommer en Année
+            cols_to_rename = {code: nom} if nom != "Indice_Gini" else {}
             annee_cols = [c for c in df.columns if c.startswith("Année") and c != "Année"]
             if annee_cols:
                 cols_to_rename[annee_cols[0]] = "Année"
